@@ -82,7 +82,7 @@ export class FakeBackend implements Backend {
   failedSubject: Subject<FailedMutation>;
   objects: {[key: string]: VersionedObject} = {};
 
-  constructor() {
+  constructor(private readOnly = false) {
     this.dataSubject = new Subject<VersionedObject>();
     this.failedSubject = new Subject<FailedMutation>();
   }
@@ -108,6 +108,9 @@ export class FakeBackend implements Backend {
   }
 
   mutate(key: Object, value: Object, baseVersion: string, mutationId: Object): void {
+    if (this.readOnly) {
+      return;
+    }
     var keyStr = serializeValue(key);
     // Check for version compatibility.
     if (this.objects.hasOwnProperty(keyStr)) {

@@ -240,7 +240,7 @@ export interface Store {
    * If 'key' or 'base' does not match any Record in the store, then 'rollback' will emit
    * false. Otherwise, 'rollback' will emit whether or not it was successful.
    */
-  rollback(key: Object, base: string): Observable<boolean>;
+  rollback(key: Object, base: string): Observable<boolean>; 
 
   /**
    * Checks if there are pending mutations in the Store and emits the Records for those mutations
@@ -613,7 +613,7 @@ export class NoopStore implements Store {
   }
 
   commit(key: Object, mutation: Object, target: Version): Observable<Record> {
-    return Observable.just<Record>(null, Scheduler.currentThread);
+    return Observable.just<Record>(new Record(mutation, target), Scheduler.currentThread);
   }
 
   rollback(key: Object, base: string): Observable<boolean> {

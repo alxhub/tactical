@@ -5,6 +5,7 @@ import {FakeBackend, VersionedObject} from '../src/backend';
 import {TacticalDataManager} from '../src/data_manager';
 import {NoopStore, Record, TacticalStore} from '../src/tactical_store';
 import {InMemoryIdbFactory} from '../src/idb';
+import {serializeValue} from '../src/json';
 import {expect} from 'chai';
 
 function _versioned(version: string, key: Object, data: Object): VersionedObject {
@@ -77,7 +78,7 @@ describe('DataManager', () => {
         });
   });
   it('pushes mutations to the TacticalStore', (done) => {
-    var be = new FakeBackend();
+    var be = new FakeBackend(true);
     var ts = new TacticalStore(InMemoryIdbFactory);
     var dm = new TacticalDataManager(be, ts);
     be.load(_versioned('v1', {key: true}, {foo: 'hello'}), false);
@@ -98,4 +99,41 @@ describe('DataManager', () => {
           });
         });
   });
+  it('pushes mutations to the backend', (done) => {
+    var be = new FakeBackend();
+    var dm = new TacticalDataManager(be, new NoopStore());
+    be.load(_versioned('v1', {key: true}, {foo: 'hello'}), false);
+    dm.beginUpdate({key: true})
+        .take(1)
+        .subscribe((updater) => {
+          expect(updater.value).to.deep.equal({foo: 'hello'});
+          updater.value['foo'] = 'goodbye';
+          updater.commit().subscribe((ok) => {
+            expect(ok).to.be.true;
+            var obj: VersionedObject = be.objects[serializeValue({key: true})];
+            expect(obj.version).to.equal('v1.m');
+            expect(obj.data).to.deep.equal({foo: 'goodbye'});
+            done();
+          });
+        });
+  });
+  it('rolls back mutations in the TacticalStore on backend success', (done) => {
+    var be = new FakeBackend();
+    var ts = new TacticalStore(InMemoryIdbFactory);
+    var dm = new TacticalDataManager(be, ts);
+    be.load(_versioned('v1', {key: true}, {foo: 'hello'}), false);
+    dm.beginUpdate({key: true})
+        .take(1)
+        .subscribe((updater) => {
+          expect(updater.value).to.deep.equal({foo: 'hello'});
+          updater.value['foo'] = 'goodbye';
+          updater.commit().subscribe((ok) => {
+            expect(ok).to.be.true;
+            ts.pending().isEmpty().subscribe((empty: boolean) => {
+              expect(empty).to.be.true;
+              done();
+            });
+          });
+        });
+  })
 });

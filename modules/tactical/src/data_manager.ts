@@ -4,7 +4,7 @@ import {Observable, Observer, Subject} from 'rx';
 import {Backend, VersionedObject} from './backend';
 import {serializeValue} from './json';
 import {Stream} from './stream';
-import {Record, Store, Version} from './tactical_store';
+import {Record, Store, Version, ErrorDM} from './tactical_store';
 
 /**
  * Manages subscriptions to data, and acts as an interface for the application.
@@ -55,7 +55,26 @@ export class TacticalDataManager implements DataManager {
    */
   private _backendData(data: VersionedObject): void {
     var keyStr = serializeValue(data.key);
-    this._store.push(data.key, data.data, data.version).subscribe();
+    console.log(keyStr);
+    this._store.push(data.key, data.data, data.version).subscribeOnError((error) => {
+        console.log('error');
+        console.log(error);
+        console.log('state:');
+        console.log(serializeValue(this._store['_idb']['db']));
+      if (error.hasOwnProperty('initial') && error.hasOwnProperty('mutation')) {
+        var vError: ErrorDM = <ErrorDM>error;
+        if (data.mutationId != null && data.mutationId.hasOwnProperty('sub') && vError.mutation.version.sub === data.mutationId['sub']) {
+          console.log('Rolling back: ' + vError.mutation.version.base);
+          this._store.rollback(data.key, vError.mutation.version.base).subscribeOnError((err) => {
+            console.log('rollback error');
+            console.log(err);
+          });
+          console.log('rolled back!');
+        } else {
+          console.log('error ignored.');
+        }
+      }
+    });
     this._pushUpdate(keyStr, new Record(data.data, new Version(data.version)));
   }
 
@@ -75,6 +94,7 @@ export class TacticalDataManager implements DataManager {
         .map((record: Record): boolean => {
           if (record != null) {
             this._pushUpdate(serializeValue(key), record);
+            this._backend.mutate(key, value, baseVersion.base, {sub: record.version.sub});
           }
           return (record != null);
         });
