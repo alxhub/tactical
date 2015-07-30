@@ -29,6 +29,7 @@
     "mocha": "^2.2.5",
     "requirejs": "^2.1.18",
     "run-sequence": "^1.1.1",
+    "socket.io": "^1.3.6",
     "tsd": "^0.6.0",
     "typescript": "alexeagle/TypeScript#error_is_class"
   },
