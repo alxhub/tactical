@@ -1,4 +1,4 @@
-/// <reference path="../../../typings/tsd.d.ts" />
+/// <reference path="../../../typings/rx/rx.d.ts" />
 import {Observable, Subject} from 'rx';
 import {Backend, FailedMutation, VersionedObject} from './backend';
 import {Version} from './tactical_store';
@@ -13,7 +13,9 @@ export type FailureHandler = (err: any, result: Failure) => void;
 export type ResolutionHandler = (err: any, result: BaseData) => void;
 
 /** A callback to handle satisfying a request. */
-export type ResponseHandler = (err: any, result: BaseData) => void;
+export type Callback = (err?: any) => void;
+
+export type PublishHandler = (key: Object, version: string, data: Object) => void;
 
 /**
  * An interface that a backend must implement and provide to Tactical's implementation of
@@ -46,7 +48,7 @@ export interface BackendService {
    * 'respond' should be called once the request has been satisfied by the backend services.
    * This will notify the calling client that their request has been satisfied.
    */
-  onRequest(key: Object, respond: ResponseHandler): void;
+  onRequest(key: Object, publish: PublishHandler, callback: Callback): void;
 }
 
 /**
@@ -160,7 +162,7 @@ export class SocketIOServer implements SocketServer {
    * Requires a BackendService to pair with and an implementation of a socket.io server to
    * connect with.
    */
-  constructor(public service: BackendService, public io: SocketIO.Server) { this._listen(); }
+  constructor(public service: BackendService, public io: SocketIO.Server) {}
 
   broadcastData(key: Object, base: string, data: Object): void {
     var dataFrame: DataFrame = {key: key, version: base, data: data, mutationId: {id: -1}};
@@ -170,34 +172,36 @@ export class SocketIOServer implements SocketServer {
   /**
    * Establishes listeners on the incoming server streams.
    */
-  private _listen(): void {
-    this.io.on('connection', (socket: SocketIO.Socket) => {
-      socket.on('request', (frame: RequestFrame) => {
-        var respond: ResponseHandler = (err: any, result: BaseData): void => {
-          var dataFrame: DataFrame =
-              {key: frame.key, version: result.base, data: result.data, mutationId: {id: -1}};
-          socket.emit('data', dataFrame);
-        };
-        this.service.onRequest(frame.key, respond);
+  public accept(socket: SocketIO.Socket): void {
+    socket.on('request', (frame: RequestFrame) => {
+      var publish: PublishHandler = (key: Object, version: string, data: Object): void => {
+        var dataFrame: DataFrame =
+            {key: key ? key : frame.key, version: version, data: data, mutationId: {}};
+        socket.emit('data', dataFrame);
+      };
+      this.service.onRequest(frame.key, publish, (err: any) => {
+        if (err) {
+          console.log(err);
+        }
       });
-      socket.on('mutation', (frame: MutationFrame) => {
-        var resolve: ResolutionHandler = (err: any, result: BaseData): void => {
-          var dataFrame: DataFrame =
-              {key: frame.key, version: result.base, data: result.data, mutationId: {id: frame.id}};
-          this.io.emit('data', dataFrame);
+    });
+    socket.on('mutation', (frame: MutationFrame) => {
+      var resolve: ResolutionHandler = (err: any, result: BaseData): void => {
+        var dataFrame: DataFrame =
+            {key: frame.key, version: result.base, data: result.data, mutationId: {id: frame.id}};
+        this.io.emit('data', dataFrame);
+      };
+      var fail: FailureHandler = (err: any, result: Failure): void => {
+        var failureFrame: FailureFrame = {
+          key: frame.key,
+          baseVersion: frame.base,
+          mutationId: {id: frame.id},
+          reason: result.reason,
+          debuggingInfo: (result.context) ? result.context : {}
         };
-        var fail: FailureHandler = (err: any, result: Failure): void => {
-          var failureFrame: FailureFrame = {
-            key: frame.key,
-            baseVersion: frame.base,
-            mutationId: {id: frame.id},
-            reason: result.reason,
-            debuggingInfo: (result.context) ? result.context : {}
-          };
-          socket.emit('failure', failureFrame);
-        };
-        this.service.onMutation(frame.key, frame.base, frame.id, frame.mutation, resolve, fail);
-      });
+        socket.emit('failure', failureFrame);
+      };
+      this.service.onMutation(frame.key, frame.base, frame.id, frame.mutation, resolve, fail);
     });
   }
 }
