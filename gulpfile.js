@@ -6,6 +6,7 @@ var gulpClean = require('gulp-clean');
 var gulpMocha = require('gulp-mocha');
 var gulpTsc = require('gulp-typescript');
 var karma = require('karma');
+var merge = require('merge2');
 var runSequence = require('run-sequence');
 
 
@@ -115,7 +116,10 @@ gulp.task('!clean', function() {
  */
 gulp.task('build', ['!clean'], function() {
   var tsResult = gulp.src('./modules/**/*.ts').pipe(gulpTsc(tsProject));
-  return tsResult.js.pipe(gulp.dest(tsProject.options.outDir));
+  return merge(
+    tsResult.dts.pipe(gulp.dest(tsProject.options.outDir)),
+    tsResult.js.pipe(gulp.dest(tsProject.options.outDir))
+  );
 });
 
 /**
@@ -123,7 +127,10 @@ gulp.task('build', ['!clean'], function() {
  */
 gulp.task('build.strict', ['!clean'], function() {
   var tsResult = gulp.src('./modules/**/*.ts').pipe(gulpTsc(strictProject));
-  return tsResult.js.pipe(gulp.dest(tsProject.options.outDir));
+  return merge(
+    tsResult.dts.pipe(gulp.dest(tsProject.options.outDir)),
+    tsResult.js.pipe(gulp.dest(tsProject.options.outDir))
+  );
 });
 
 /**
