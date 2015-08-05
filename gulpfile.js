@@ -8,7 +8,26 @@ var gulpTsc = require('gulp-typescript');
 var karma = require('karma');
 var merge = require('merge2');
 var runSequence = require('run-sequence');
+var gulpUtil = require('gulp-util');
+var through = require('through2');
 
+function stripDtsImports() {
+  return through.obj(function(file, enc, cb) {
+    try {
+      var contents = file.contents.toString().split('\n');
+      for (var i = contents.length - 1; i >= 0; i--) {
+        if (contents[i].substring(0, 14) == '/// <reference') {
+          contents.splice(i, 1);
+        }
+      }
+      file.contents = new Buffer(contents.join('\n'));
+      this.push(file);
+    } catch (err) {
+      this.emit('error', new gulpUtil.PluginError('strip-dts-imports', err, {fileName: file.path}));
+    }
+    cb();
+  });
+}
 
 // ==========
 // config
@@ -117,7 +136,9 @@ gulp.task('!clean', function() {
 gulp.task('build', ['!clean'], function() {
   var tsResult = gulp.src('./modules/**/*.ts').pipe(gulpTsc(tsProject));
   return merge(
-    tsResult.dts.pipe(gulp.dest(tsProject.options.outDir)),
+    tsResult.dts
+        .pipe(stripDtsImports())
+        .pipe(gulp.dest(tsProject.options.outDir)),
     tsResult.js.pipe(gulp.dest(tsProject.options.outDir))
   );
 });
@@ -128,7 +149,9 @@ gulp.task('build', ['!clean'], function() {
 gulp.task('build.strict', ['!clean'], function() {
   var tsResult = gulp.src('./modules/**/*.ts').pipe(gulpTsc(strictProject));
   return merge(
-    tsResult.dts.pipe(gulp.dest(tsProject.options.outDir)),
+    tsResult.dts
+        .pipe(stripDtsImports())
+        .pipe(gulp.dest(tsProject.options.outDir)),
     tsResult.js.pipe(gulp.dest(tsProject.options.outDir))
   );
 });
